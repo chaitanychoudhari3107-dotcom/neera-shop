@@ -17,14 +17,16 @@ export default function DailyEntry() {
   const [isEdit,          setIsEdit]          = useState(false)
   const [status,          setStatus]          = useState("")
   const [loading,         setLoading]         = useState(false)
-useEffect(() => {
-  const handler = (e) => {
-    setDate(e.detail)
-    loadExisting(e.detail)
-  }
-  window.addEventListener("loadEntry", handler)
-  return () => window.removeEventListener("loadEntry", handler)
-}, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      setDate(e.detail)
+      loadExisting(e.detail)
+    }
+    window.addEventListener("loadEntry", handler)
+    return () => window.removeEventListener("loadEntry", handler)
+  }, [])
+
   const loadExisting = async (d) => {
     try {
       const data = await getEntry(d)
@@ -68,12 +70,34 @@ useEffect(() => {
         cash_purchases:   parseFloat(cashPurchases) || 0,
         prakash_expenses: prakashExpenses.filter(e => e.description),
       }
+
       if (isEdit) {
         await updateEntry(date, payload)
         setStatus("✅ Entry updated successfully!")
       } else {
         await createEntry(payload)
-        setStatus("✅ Entry saved successfully!")
+
+        // calculate change float from small notes
+        const changeFloat =
+          (denoms.n_50 * 50) +
+          (denoms.n_20 * 20) +
+          (denoms.n_10 * 10)
+
+        // set tomorrow's date
+        const tomorrow = new Date(date)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const tomorrowStr = tomorrow.toISOString().split("T")[0]
+
+        setStatus(`✅ Entry saved! Tomorrow's morning float pre-filled: ₹${changeFloat.toLocaleString("en-IN")}`)
+
+        // reset form with tomorrow's date and pre-filled float
+        setDate(tomorrowStr)
+        setMorningFloat(changeFloat)
+        setDenoms(emptyDenoms)
+        setUpiEarnings("")
+        setCashPurchases("")
+        setPrakashExpenses([])
+        setIsEdit(false)
       }
     } catch (e) {
       setStatus(`❌ Error: ${e.message}`)
@@ -85,8 +109,11 @@ useEffect(() => {
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: "block", fontSize: 13, fontWeight: 500,
         color: "#374151", marginBottom: 6 }}>{label}</label>
-      <input type={type} value={value}
+      <input
+        type={type}
+        value={value}
         onChange={e => setter(e.target.value)}
+        onWheel={e => e.target.blur()}
         style={{ width: "100%", padding: "10px 12px", borderRadius: 10,
           border: "1px solid #e5e7eb", fontSize: 15, boxSizing: "border-box" }}
       />
