@@ -27,6 +27,28 @@ export default function DailyEntry() {
     return () => window.removeEventListener("loadEntry", handler)
   }, [])
 
+  useEffect(() => {
+    loadExisting(today())
+  }, [])
+
+  const prefillMorningFloat = async (d) => {
+    try {
+      const prev = new Date(d)
+      prev.setDate(prev.getDate() - 1)
+      const prevStr = prev.toISOString().split("T")[0]
+      const prevData = await getEntry(prevStr)
+      const changeFloat =
+        ((prevData.n_50  || 0) * 50) +
+        ((prevData.n_20  || 0) * 20) +
+        ((prevData.n_10  || 0) * 10)
+      setMorningFloat(changeFloat)
+      setStatus(`💡 Morning float auto-filled from ${prevStr}: ₹${changeFloat.toLocaleString("en-IN")}`)
+    } catch {
+      setMorningFloat("")
+      setStatus("")
+    }
+  }
+
   const loadExisting = async (d) => {
     try {
       const data = await getEntry(d)
@@ -40,12 +62,17 @@ export default function DailyEntry() {
       setStatus("Loaded existing entry — you can now edit it.")
     } catch {
       setIsEdit(false)
-      setStatus("")
+      setDenoms(emptyDenoms)
+      setUpiEarnings("")
+      setCashPurchases("")
+      setPrakashExpenses([])
+      await prefillMorningFloat(d)
     }
   }
 
   const handleDateChange = (e) => {
     setDate(e.target.value)
+    setStatus("")
     loadExisting(e.target.value)
   }
 
@@ -77,20 +104,16 @@ export default function DailyEntry() {
       } else {
         await createEntry(payload)
 
-        // calculate change float from small notes
         const changeFloat =
-          (denoms.n_50 * 50) +
-          (denoms.n_20 * 20) +
-          (denoms.n_10 * 10)
+          ((denoms.n_50 || 0) * 50) +
+          ((denoms.n_20 || 0) * 20) +
+          ((denoms.n_10 || 0) * 10)
 
-        // set tomorrow's date
         const tomorrow = new Date(date)
         tomorrow.setDate(tomorrow.getDate() + 1)
         const tomorrowStr = tomorrow.toISOString().split("T")[0]
 
         setStatus(`✅ Entry saved! Tomorrow's morning float pre-filled: ₹${changeFloat.toLocaleString("en-IN")}`)
-
-        // reset form with tomorrow's date and pre-filled float
         setDate(tomorrowStr)
         setMorningFloat(changeFloat)
         setDenoms(emptyDenoms)
@@ -162,8 +185,10 @@ export default function DailyEntry() {
 
       {status && (
         <p style={{ padding: "10px 14px", borderRadius: 8, marginBottom: 16,
-          background: status.startsWith("✅") ? "#E1F5EE" : "#fee2e2",
-          color:      status.startsWith("✅") ? "#085041" : "#991b1b",
+          background: status.startsWith("✅") ? "#E1F5EE" :
+                      status.startsWith("💡") ? "#E6F1FB" : "#fee2e2",
+          color:      status.startsWith("✅") ? "#085041" :
+                      status.startsWith("💡") ? "#042C53" : "#991b1b",
           fontSize: 14 }}>{status}</p>
       )}
 

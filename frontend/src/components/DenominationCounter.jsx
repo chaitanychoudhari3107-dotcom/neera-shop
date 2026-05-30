@@ -9,8 +9,12 @@ export default function DenominationCounter({ values, onChange }) {
 
   const handleInput = (denom, val) => {
     const key = `n_${denom}`
-    const next = Math.max(0, parseInt(val) || 0)
-    onChange({ ...values, [key]: next })
+    if (val === "" || val === null) {
+      onChange({ ...values, [key]: "" })
+    } else {
+      const next = Math.max(0, parseInt(val) || 0)
+      onChange({ ...values, [key]: next })
+    }
   }
 
   const total       = DENOMS.reduce((s, d) => s + (values[`n_${d}`] || 0) * d, 0)
@@ -23,7 +27,7 @@ export default function DenominationCounter({ values, onChange }) {
 
       {DENOMS.map(denom => {
         const key      = `n_${denom}`
-        const count    = values[key] || 0
+        const count    = values[key]
         const isLocker = denom >= 100
 
         return (
@@ -48,8 +52,14 @@ export default function DenominationCounter({ values, onChange }) {
             <input
               type="number"
               min="0"
-              value={count}
+              value={count === 0 ? "" : count}
+              onFocus={e => e.target.select()}
               onChange={e => handleInput(denom, e.target.value)}
+              onBlur={e => {
+                if (e.target.value === "") onChange({ ...values, [`n_${denom}`]: 0 })
+              }}
+              onWheel={e => e.target.blur()}
+              placeholder="0"
               style={{
                 width: 60, height: 40, textAlign: "center",
                 borderRadius: 8, border: "1px solid #e5e7eb",
@@ -65,7 +75,7 @@ export default function DenominationCounter({ values, onChange }) {
               }}>+</button>
 
             <span style={{ marginLeft: "auto", fontSize: 13, color: "#6b7280" }}>
-              ₹{(count * denom).toLocaleString("en-IN")}
+              ₹{((count || 0) * denom).toLocaleString("en-IN")}
             </span>
           </div>
         )
