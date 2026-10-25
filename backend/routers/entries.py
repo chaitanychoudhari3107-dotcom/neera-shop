@@ -1,13 +1,40 @@
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
+from datetime import date
 from fastapi import APIRouter, HTTPException
 from models.schemas import DailyEntryCreate, DailyEntryUpdate
 from models.calculations import run_all_calculations
 from database import supabase
+from weather_service import get_pune_weather
 
 router = APIRouter(prefix="/entries", tags=["entries"])
+def fetch_weather_safely(entry_date):
+    # The unified service retrieves daily AND 9 AM–6 PM values in one request.
+    try:
+        return get_pune_weather(str(entry_date))
+    except Exception as error:
+        print(f"Weather unavailable for {entry_date}: {type(error).__name__}")
+        return {}  # Saving financial information must remain possible.
+
+
+@router.get("/weather/{entry_date}")
+def get_weather_for_date(entry_date: date):
+    try:
+        weather = get_pune_weather(entry_date.isoformat())
+        return weather
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to fetch Pune weather"
+        )
 
 @router.post("/")
 def create_entry(entry: DailyEntryCreate):
@@ -39,7 +66,7 @@ def create_entry(entry: DailyEntryCreate):
         "locker_cash":        calcs["locker_cash"],
         "net_daily_sales":    calcs["net_daily_sales"],
     }
-
+    row.update(fetch_weather_safely(entry_date_str))
     result = supabase.table("daily_entries").insert(row).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to insert entry")
@@ -63,20 +90,55 @@ def create_entry(entry: DailyEntryCreate):
 
 @router.get("/")
 def get_all_entries():
-    result = supabase.table("daily_entries")\
-        .select("*")\
-        .order("entry_date", desc=True)\
-        .execute()
+    print("HISTORY STARTED", flush=True)
 
-    entries = result.data or []
+    # Paginate both tables (Supabase commonly limits responses to 1000 rows).
+    entries = []
+    page_size = 500
+    offset = 0
+    while True:
+        result = (supabase.table("daily_entries")
+                  .select("*")
+                  .order("entry_date", desc=True)
+                  .range(offset, offset + page_size - 1)
+                  .execute())
+        batch = result.data or []
+        entries.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    if not entries:
+        return []
+
+    prakash_by_date = {}
+
+    page_size = 500
+    offset = 0
+
+    while True:
+        prakash_result = supabase.table("prakash_expenses") \
+            .select("*") \
+            .order("entry_date") \
+            .range(offset, offset + page_size - 1) \
+            .execute()
+
+        expenses = prakash_result.data or []
+
+        for expense in expenses:
+            date = expense["entry_date"]
+            prakash_by_date.setdefault(date, []).append(expense)
+
+        if len(expenses) < page_size:
+            break
+
+        offset += page_size
 
     for entry in entries:
-        prakash = supabase.table("prakash_expenses")\
-            .select("*")\
-            .eq("entry_date", entry["entry_date"])\
-            .execute()
-        entry["prakash_expenses"] = prakash.data or []
-
+        entry["prakash_expenses"] = prakash_by_date.get(
+            entry["entry_date"], []
+        )
+    print("HISTORY FINISHED", len(entries), flush=True)
     return entries
 
 
@@ -139,7 +201,9 @@ def update_entry(entry_date: str, entry: DailyEntryUpdate):
         "locker_cash":        calcs["locker_cash"],
         "net_daily_sales":    calcs["net_daily_sales"],
     }
-
+    # Preserve previously stored weather readings when an API field is unavailable.
+    update_row.update({key: value for key, value in fetch_weather_safely(entry_date).items()
+                       if value is not None})
     supabase.table("daily_entries")\
         .update(update_row)\
         .eq("entry_date", entry_date)\

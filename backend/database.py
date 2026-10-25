@@ -1,13 +1,24 @@
 import os
-import sys
-sys.path.append(os.path.dirname(__file__))
+from pathlib import Path
 
-from supabase import create_client, Client
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
-load_dotenv()
+# Load environment variables
+load_dotenv(Path(__file__).with_name(".env"))
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Client for verifying user authentication
+auth_client: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
+
+# Privileged database client - backend only
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SECRET_KEY
+)
